@@ -22,4 +22,5 @@ const LikeSchema = new mongoose.Schema(
   // Prevent duplicate likes by the same user on the same post
   LikeSchema.index({ postId: 1, userId: 1 }, { unique: true });
   
-  module.exports = mongoose.model('Like', LikeSchema);
+  const Like = mongoose.model('Like', LikeSchema);
+  export default Like;

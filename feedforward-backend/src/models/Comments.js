@@ -28,4 +28,5 @@ const CommentSchema = new mongoose.Schema(
   // Optional: Index to improve query performance for comments on a specific post
   CommentSchema.index({ postId: 1, date: -1 });
   
-  module.exports = mongoose.model('Comment', CommentSchema);
+  const Comment = mongoose.model('Comment', CommentSchema);
+  export default Comment;

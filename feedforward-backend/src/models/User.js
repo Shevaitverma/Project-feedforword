@@ -76,9 +76,9 @@ const UserSchema = new mongoose.Schema(
     }
   });
   
-  // Method to compare entered password with hashed password
-  UserSchema.methods.comparePassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
-  };
+// Method to compare entered password with hashed password
+UserSchema.methods.comparePassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
   
-  module.exports = mongoose.model('User', UserSchema);
+const User = mongoose.model('User', UserSchema);

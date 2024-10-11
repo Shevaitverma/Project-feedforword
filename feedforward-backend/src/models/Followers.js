@@ -22,4 +22,5 @@ const FollowerSchema = new mongoose.Schema(
 // Prevent duplicate follow relationships
 FollowerSchema.index({ followedBy: 1, followsTo: 1 }, { unique: true });
 
-module.exports = mongoose.model('Follower', FollowerSchema);
+const Follower = mongoose.model('Follower', FollowerSchema);
+export default Follower;
