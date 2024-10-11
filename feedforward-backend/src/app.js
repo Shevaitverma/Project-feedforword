@@ -54,10 +54,12 @@ const limiter = rateLimit({
     max: 50, // Limit each IP to 50 requests per windowMs
     message: 'Too many requests from this IP, please try again after 15 minutes'
 });
-app.use('/api', limiter);
+app.use('/api', limiter); // we can also add limiter globally to all routes or any specific route
+// app.use(limiter);  // --->>>  this is a global limiter
 
 // Load Swagger Document
-const swaggerDocument = YAML.load(path.join(process.cwd(), 'docs/api/api-spec.yaml'));
+const swaggerDocument = YAML.load(path.join(process.cwd(), 'src/docs/api/api-spec.yaml'));
+
 
 // Use Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
