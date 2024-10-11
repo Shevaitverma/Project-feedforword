@@ -1,13 +1,7 @@
 // src/middleware/errorHandler.js
 
-/**
- * ErrorHandler Middleware
- *
- * This module exports two middleware functions:
- * 1. notFound: Handles 404 errors for undefined routes.
- * 2. errorHandler: Handles all other errors globally.
- */
-
+import mongoose from 'mongoose';
+import logger from '../config/logger.js';
 
 /**
  * notFound Middleware
@@ -29,6 +23,11 @@ export const errorHandler = (err, req, res, next) => {
     // If response status code is 200, set it to 500
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
     res.status(statusCode);
+
+    // Log the error
+    logger.error(`${req.method} ${req.originalUrl} ${statusCode} - ${err.message}`, {
+        stack: err.stack,
+    });
 
     // Construct error response
     const response = {
