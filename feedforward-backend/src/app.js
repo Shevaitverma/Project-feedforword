@@ -9,6 +9,8 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
+import swaggerUi from 'swagger-ui-express';
+import YAML from 'yamljs';
 import path from 'path';
 
 // =======================
@@ -53,6 +55,12 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again after 15 minutes'
 });
 app.use('/api', limiter);
+
+// Load Swagger Document
+const swaggerDocument = YAML.load(path.join(process.cwd(), 'docs/api/api-spec.yaml'));
+
+// Use Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // =======================
 // Import Routes
