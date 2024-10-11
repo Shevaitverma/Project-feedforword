@@ -1,22 +1,23 @@
 import jwt from 'jsonwebtoken';
 
-export const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE,
-  });
+/**
+ * Generate JWT Token
+ *
+ * @param {Object} payload - The payload to encode in the token.
+ * @param {String} expiresIn - Token expiration time.
+ * @returns {String} - Signed JWT token.
+ */
+export const generateToken = (payload, expiresIn = '7d') => {
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 };
 
-export const sendTokenResponse = (user, statusCode, res) => {
-  const token = generateToken(user._id);
-
-  const options = {
-    expires: new Date(Date.now() + process.env.COOKIE_EXPIRE * 24 * 60 * 60 * 1000),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-  };
-
-  res
-    .status(statusCode)
-    .cookie('token', token, options)
-    .json({ success: true, token });
+/**
+ * Verify JWT Token
+ *
+ * @param {String} token - The token to verify.
+ * @returns {Object} - Decoded token payload.
+ * @throws {Error} - If token is invalid or expired.
+ */
+export const verifyToken = (token) => {
+    return jwt.verify(token, process.env.JWT_SECRET);
 };

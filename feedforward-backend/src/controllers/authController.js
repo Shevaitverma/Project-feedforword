@@ -1,210 +1,287 @@
-// src/controllers/authController.js
-import User from '../models/User';
-import Session from '../models/Session';
-import { signToken, verifyToken } from '../utils/jwtUtils';
-import emailService from '../services/emailService';
-import otpService from '../services/otpService';
+import User from '../models/User.js';
+import Session from '../models/Session.js';
+import jwt from 'jsonwebtoken';
+import transporter from '../config/email.js';
+import crypto from 'crypto';
 
-// Register a new user
-exports.register = async (req, res, next) => {
-  try {
-    const { name, email, username, password } = req.body;
+/**
+ * Register a new user
+ *
+ * Route: POST /api/v1/auth/register
+ * Access: Public
+ */
+export const register = async (req, res, next) => {
+    try {
+        const { name, email, username, password, avatar, bio, interests } = req.body;
 
-    // Create user
-    const newUser = await User.create({
-      name,
-      email,
-      username,
-      password
-    });
+        // Check if email or username already exists
+        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        if (existingUser) {
+            return res.status(400).json({ success: false, message: 'Email or Username already exists' });
+        }
 
-    // Generate email verification token
-    const emailToken = signToken({ id: newUser._id }, '1d');
+        const newUser = await User.create({
+            name,
+            email,
+            username,
+            password,
+            avatar,
+            bio,
+            interests,
+        });
 
-    // Send verification email
-    await emailService.sendVerificationEmail(newUser.email, emailToken);
+        // Generate email verification token
+        const verificationToken = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
 
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully. Please verify your email.',
-      data: {
-        user: {
-          id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          username: newUser.username,
-          isVerified: newUser.isVerified,
-        },
-      },
-    });
-  } catch (error) {
-    // Handle duplicate key error for email or username
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      return res.status(400).json({ success: false, message: `The ${field} is already in use.` });
+        // Send verification email
+        const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+        const message = `
+            <h1>Email Verification</h1>
+            <p>Please verify your email by clicking the link below:</p>
+            <a href="${verificationUrl}" clicktracking=off>${verificationUrl}</a>
+        `;
+
+        await transporter.sendMail({
+            from: `"FeedForward Support" <${process.env.SMTP_USER}>`,
+            to: newUser.email,
+            subject: 'Email Verification - FeedForward',
+            html: message,
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully. Please check your email to verify your account.',
+        });
+    } catch (error) {
+        next(error);
     }
-    next(error);
-  }
 };
 
-// Login user and create session
-exports.login = async (req, res, next) => {
-  try {
-    const { emailOrUsername, password } = req.body;
+/**
+ * Login user and create session
+ *
+ * Route: POST /api/v1/auth/login
+ * Access: Public
+ */
+export const login = async (req, res, next) => {
+    try {
+        const { email, password } = req.body;
 
-    // Find user by email or username
-    const user = await User.findOne({
-      $or: [{ email: emailOrUsername }, { username: emailOrUsername }],
-    }).select('+password');
+        // Validate email and password
+        if (!email || !password) {
+            return res.status(400).json({ success: false, message: 'Please provide email and password' });
+        }
 
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials.' });
+        // Check for user
+        const user = await User.findOne({ email }).select('+password');
+        if (!user) {
+            return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        }
+
+        // Check if password matches
+        const isMatch = await user.matchPassword(password);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        }
+
+        // Check if user is verified
+        if (!user.isVerified) {
+            return res.status(401).json({ success: false, message: 'Please verify your email before logging in' });
+        }
+
+        // Create JWT Token
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        // Create session
+        const session = await Session.create({
+            userId: user._id,
+            token,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        });
+
+        // Set token in HTTP-only cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Logged in successfully',
+            data: {
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    username: user.username,
+                    avatar: user.avatar,
+                    bio: user.bio,
+                    interests: user.interests,
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
     }
-
-    // Check if email is verified
-    if (!user.isVerified) {
-      return res.status(401).json({ success: false, message: 'Please verify your email before logging in.' });
-    }
-
-    // Compare password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials.' });
-    }
-
-    // Generate JWT token
-    const token = signToken({ id: user._id });
-
-    // Create session
-    const session = await Session.create({
-      userId: user._id,
-      token,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-    });
-
-    res.status(200).json({
-      success: true,
-      token,
-      data: {
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          username: user.username,
-          avatar: user.avatar,
-          bio: user.bio,
-          interests: user.interests,
-          isVerified: user.isVerified,
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
-// Logout user and invalidate session
-exports.logout = async (req, res, next) => {
-  try {
-    const token = req.token; // Retrieved from auth middleware
+/**
+ * Logout user and invalidate session
+ *
+ * Route: POST /api/v1/auth/logout
+ * Access: Private
+ */
+export const logout = async (req, res, next) => {
+    try {
+        const token = req.cookies.token;
 
-    // Delete session
-    await Session.findOneAndDelete({ token });
+        if (token) {
+            // Remove session from database
+            await Session.findOneAndDelete({ token });
 
-    res.status(200).json({
-      success: true,
-      message: 'Logged out successfully.',
-    });
-  } catch (error) {
-    next(error);
-  }
+            // Clear cookie
+            res.clearCookie('token', {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+            });
+        }
+
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        next(error);
+    }
 };
 
-// Verify user's email
-exports.verifyEmail = async (req, res, next) => {
-  try {
-    const { token } = req.query;
+/**
+ * Verify user's email address
+ *
+ * Route: GET /api/v1/auth/verify-email?token=...
+ * Access: Public
+ */
+export const verifyEmail = async (req, res, next) => {
+    try {
+        const { token } = req.query;
 
-    if (!token) {
-      return res.status(400).json({ success: false, message: 'Verification token is missing.' });
+        if (!token) {
+            return res.status(400).json({ success: false, message: 'Invalid or missing token' });
+        }
+
+        // Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Find user and update verification status
+        const user = await User.findById(decoded.id);
+        if (!user) {
+            return res.status(400).json({ success: false, message: 'Invalid token' });
+        }
+
+        if (user.isVerified) {
+            return res.status(400).json({ success: false, message: 'Email already verified' });
+        }
+
+        user.isVerified = true;
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'Email verified successfully' });
+    } catch (error) {
+        next(error);
     }
-
-    // Verify token
-    const decoded = verifyToken(token);
-    const userId = decoded.id;
-
-    // Update user's verification status
-    const user = await User.findByIdAndUpdate(userId, { isVerified: true }, { new: true });
-
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid token or user does not exist.' });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Email verified successfully.',
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
-// Initiate password reset
-exports.forgotPassword = async (req, res, next) => {
-  try {
-    const { email } = req.body;
+/**
+ * Initiate password reset
+ *
+ * Route: POST /api/v1/auth/forgot-password
+ * Access: Public
+ */
+export const forgotPassword = async (req, res, next) => {
+    try {
+        const { email } = req.body;
 
-    // Find user by email
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'User with this email does not exist.' });
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Please provide your email' });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(400).json({ success: false, message: 'There is no user with that email' });
+        }
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(20).toString('hex');
+
+        // Hash token and set to user
+        const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+        // Set reset token and expiration
+        user.resetPasswordToken = hashedToken;
+        user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        await user.save();
+
+        // Create reset URL
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+        const message = `
+            <h1>Password Reset</h1>
+            <p>Please reset your password by clicking the link below:</p>
+            <a href="${resetUrl}" clicktracking=off>${resetUrl}</a>
+        `;
+
+        // Send email
+        await transporter.sendMail({
+            from: `"FeedForward Support" <${process.env.SMTP_USER}>`,
+            to: user.email,
+            subject: 'Password Reset - FeedForward',
+            html: message,
+        });
+
+        res.status(200).json({ success: true, message: 'Password reset email sent' });
+    } catch (error) {
+        next(error);
     }
-
-    // Generate password reset token
-    const resetToken = signToken({ id: user._id }, '1h');
-
-    // Send password reset email
-    await emailService.sendPasswordResetEmail(user.email, resetToken);
-
-    res.status(200).json({
-      success: true,
-      message: 'Password reset email sent.',
-    });
-  } catch (error) {
-    next(error);
-  }
 };
 
-// Reset password using token
-exports.resetPassword = async (req, res, next) => {
-  try {
-    const { token, newPassword } = req.body;
+/**
+ * Reset password using token
+ *
+ * Route: POST /api/v1/auth/reset-password
+ * Access: Public
+ */
+export const resetPassword = async (req, res, next) => {
+    try {
+        const { token, password } = req.body;
 
-    if (!token) {
-      return res.status(400).json({ success: false, message: 'Reset token is missing.' });
+        if (!token || !password) {
+            return res.status(400).json({ success: false, message: 'Invalid request' });
+        }
+
+        // Hash token
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Find user by reset token and check expiration
+        const user = await User.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpire: { $gt: Date.now() },
+        });
+
+        if (!user) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+        }
+
+        // Update password and clear reset fields
+        user.password = password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'Password updated successfully' });
+    } catch (error) {
+        next(error);
     }
-
-    // Verify token
-    const decoded = verifyToken(token);
-    const userId = decoded.id;
-
-    // Find user and update password
-    const user = await User.findById(userId).select('+password');
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid token or user does not exist.' });
-    }
-
-    user.password = newPassword;
-    await user.save();
-
-    // Optionally, invalidate all existing sessions for the user
-    await Session.deleteMany({ userId: user._id });
-
-    res.status(200).json({
-      success: true,
-      message: 'Password reset successfully.',
-    });
-  } catch (error) {
-    next(error);
-  }
 };
