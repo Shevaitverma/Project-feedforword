@@ -1,7 +1,7 @@
 import User from '../models/User.js';
 import Session from '../models/Session.js';
 import crypto from 'crypto';
-import asyncHandler from '../utils/asyncHandler.js';
+import asyncHandler from 'express-async-handler';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/emailService.js';
 import { generateToken, verifyToken } from '../utils/jwtUtils.js';
 
@@ -12,7 +12,7 @@ import { generateToken, verifyToken } from '../utils/jwtUtils.js';
  * Access: Public
  */
 export const register = asyncHandler(async (req, res, next) => {
-    const { name, email, username, password, avatar, bio, interests } = req.body;
+    const { name, email, username, password } = req.body;
 
     // Validate required fields
     if (!email || !username || !password) {
@@ -30,17 +30,20 @@ export const register = asyncHandler(async (req, res, next) => {
         name,
         email,
         username,
-        password,
-        avatar,
-        bio,
-        interests,
+        password
     });
+    // console.log(newUser);
+    
 
     // Generate email verification token
     const verificationToken = generateToken({ id: newUser._id }, '1d');
+    // console.log(verificationToken);
+    
 
     // Create verification URL
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    // console.log(verificationUrl);
+    
 
     // Send verification email
     await sendVerificationEmail(newUser.email, verificationUrl);
@@ -72,18 +75,19 @@ export const login = asyncHandler(async (req, res, next) => {
     }
 
     // Check if password matches
-    const isMatch = await user.matchPassword(password);
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
         return res.status(400).json({ success: false, message: 'Invalid credentials' });
     }
 
     // Check if user is verified
-    if (!user.isVerified) {
-        return res.status(401).json({ success: false, message: 'Please verify your email before logging in' });
-    }
+    // if (!user.isVerified) {
+    //     return res.status(401).json({ success: false, message: 'Please verify your email before logging in' });
+    // }
 
     // Create JWT Token
-    const token = generateToken({ id: user._id }, '7d');
+    const token = generateToken({ id: user._id }, process.env.JWT_EXPIRE);
+    
 
     // Create session
     await Session.create({
@@ -99,6 +103,8 @@ export const login = asyncHandler(async (req, res, next) => {
         sameSite: 'strict',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
+    // console.log("session token = ", token);
+    
 
     res.status(200).json({
         success: true,

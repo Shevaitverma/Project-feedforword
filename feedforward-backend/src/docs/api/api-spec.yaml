@@ -108,15 +108,6 @@ components:
         password:
           type: string
           format: password
-        avatar:
-          type: string
-          format: uri
-        bio:
-          type: string
-        interests:
-          type: array
-          items:
-            type: string
 
     LoginRequest:
       type: object

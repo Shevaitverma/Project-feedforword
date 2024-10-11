@@ -1,4 +1,4 @@
-import mongoose from mongoose;
+import mongoose from "mongoose";
 
 // Define the Follower Schema
 const FollowerSchema = new mongoose.Schema(

@@ -8,7 +8,6 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
-import xss from 'xss-clean';
 import swaggerUi from 'swagger-ui-express';
 import YAML from 'yamljs';
 import path from 'path';
@@ -44,9 +43,6 @@ app.use(cookieParser());
 
 // Data Sanitization against NoSQL Injection
 app.use(mongoSanitize());
-
-// Data Sanitization against XSS
-app.use(xss());
 
 // Rate Limiting
 const limiter = rateLimit({

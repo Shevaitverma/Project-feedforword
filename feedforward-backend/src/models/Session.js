@@ -1,4 +1,4 @@
-import mongoose from mongoose;
+import mongoose from "mongoose";
 
 // Define the Session Schema
 const SessionSchema = new mongoose.Schema(

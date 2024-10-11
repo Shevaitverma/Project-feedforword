@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
  * @returns {String} - Signed JWT token.
  */
 export const generateToken = (payload, expiresIn = '7d') => {
-    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+    return jwt.sign(payload, process.env.JWT_SECRETE, { expiresIn });
 };
 
 /**
@@ -19,5 +19,5 @@ export const generateToken = (payload, expiresIn = '7d') => {
  * @throws {Error} - If token is invalid or expired.
  */
 export const verifyToken = (token) => {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, process.env.JWT_SECRETE);
 };
